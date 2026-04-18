@@ -98,7 +98,7 @@ export function DebateArena({
               DEBATE ARENA
             </span>
             <span
-              className="hidden sm:block font-mono text-xs px-2 py-0.5 rounded border truncate max-w-[240px]"
+              className="hidden sm:block font-mono text-xs px-2 py-0.5 rounded border truncate max-w-60"
               style={{
                 borderColor: "var(--color-arena-muted)",
                 color: "var(--color-text-muted)",
@@ -160,7 +160,7 @@ export function DebateArena({
       <div className="flex flex-1 max-w-6xl mx-auto w-full px-4 py-4 gap-4">
 
         {/* ── Side labels (desktop) ─────────────────────────────────────── */}
-        <div className="hidden lg:flex flex-col items-center pt-2 w-28 flex-shrink-0">
+        <div className="hidden lg:flex flex-col items-center pt-2 w-28 shrink-0">
           <div
             className="font-display text-4xl tracking-widest"
             style={{ color: "var(--color-for-primary)" }}
@@ -282,7 +282,7 @@ export function DebateArena({
           >
             {/* Side badge */}
             <div
-              className="font-display text-sm tracking-widest pb-2.5 flex-shrink-0"
+              className="font-display text-sm tracking-widest pb-2.5 shrink-0"
               style={{
                 color: userSide === "for"
                   ? "var(--color-for-primary)"
@@ -311,7 +311,7 @@ export function DebateArena({
             <button
               onClick={handleSend}
               disabled={!input.trim() || isStreaming}
-              className="flex-shrink-0 px-4 py-2 rounded font-mono text-sm tracking-widest transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              className="shrink-0 px-4 py-2 rounded font-mono text-sm tracking-widest transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               style={{
                 background: input.trim() && !isStreaming
                   ? "var(--color-amber-vivid)"
@@ -334,7 +334,7 @@ export function DebateArena({
         </div>
 
         {/* ── Right side label (desktop) ────────────────────────────── */}
-        <div className="hidden lg:flex flex-col items-center pt-2 w-28 flex-shrink-0">
+        <div className="hidden lg:flex flex-col items-center pt-2 w-28 shrink-0">
           <div
             className="font-display text-4xl tracking-widest"
             style={{ color: "var(--color-against-primary)" }}
