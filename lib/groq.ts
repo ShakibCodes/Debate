@@ -1,15 +1,13 @@
+export const GROQ_BASE = "https://api.groq.com/openai/v1";
+
 /**
- * Thin wrapper around the OpenRouter API.
- * Keeps all fetch logic in one place so routes stay clean.
+ * Best free Groq models for debate:
+ * - llama-3.3-70b-versatile  → smartest, best arguments (recommended)
+ * - llama3-8b-8192           → fastest, lighter
+ * - mixtral-8x7b-32768       → good reasoning, large context
  */
-
-export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
-
-/** Model used for streaming debate turns */
-export const DEBATE_MODEL = "openrouter/free";
-
-/** Model used for fast JSON analysis (fallacy detection, verdict) */
-export const ANALYSIS_MODEL = "openrouter/free";
+export const DEBATE_MODEL  = "llama-3.3-70b-versatile";
+export const ANALYSIS_MODEL = "llama-3.3-70b-versatile";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,14 +16,14 @@ export interface ChatMessage {
   content: string;
 }
 
-export interface OpenRouterStreamOptions {
+export interface GroqStreamOptions {
   model?: string;
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
 }
 
-export interface OpenRouterJSONOptions {
+export interface GroqJSONOptions {
   model?: string;
   messages: ChatMessage[];
   temperature?: number;
@@ -35,8 +33,8 @@ export interface OpenRouterJSONOptions {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getApiKey(): string {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error("OPENROUTER_API_KEY is not set");
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error("GROQ_API_KEY is not set");
   return key;
 }
 
@@ -44,77 +42,89 @@ function baseHeaders() {
   return {
     Authorization: `Bearer ${getApiKey()}`,
     "Content-Type": "application/json",
-    "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-    "X-Title": "AI Debate Arena",
   };
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // ─── Streaming ────────────────────────────────────────────────────────────────
 
-/**
- * Returns a raw Response with a ReadableStream of SSE chunks.
- * Pass this directly into a Next.js streaming route response.
- */
 export async function streamChat(
-  options: OpenRouterStreamOptions
+  options: GroqStreamOptions,
+  retries = 3
 ): Promise<Response> {
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: "POST",
-    headers: baseHeaders(),
-    body: JSON.stringify({
-      model: options.model ?? DEBATE_MODEL,
-      messages: options.messages,
-      temperature: options.temperature ?? 0.85,
-      max_tokens: options.max_tokens ?? 512,
-      stream: true,
-    }),
-  });
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(`${GROQ_BASE}/chat/completions`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify({
+        model: options.model ?? DEBATE_MODEL,
+        messages: options.messages,
+        temperature: options.temperature ?? 0.85,
+        max_tokens: options.max_tokens ?? 512,
+        stream: true,
+      }),
+    });
 
-  if (!res.ok) {
+    if (res.ok) return res;
+
+    if (res.status === 429 && attempt < retries - 1) {
+      const waitMs = 1500 * (attempt + 1);
+      console.warn(`[groq] 429 rate limit, retrying in ${waitMs}ms (attempt ${attempt + 1}/${retries})`);
+      await sleep(waitMs);
+      continue;
+    }
+
     const error = await res.text();
-    throw new Error(`OpenRouter stream error ${res.status}: ${error}`);
+    throw new Error(`Groq stream error ${res.status}: ${error}`);
   }
 
-  return res;
+  throw new Error("Groq stream failed after max retries");
 }
 
 // ─── JSON (non-streaming) ─────────────────────────────────────────────────────
 
-/**
- * Calls OpenRouter and returns the full assistant message as a string.
- * Intended for JSON-mode requests (fallacy detection, verdict).
- */
-export async function chatJSON(options: OpenRouterJSONOptions): Promise<string> {
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: "POST",
-    headers: baseHeaders(),
-    body: JSON.stringify({
-      model: options.model ?? ANALYSIS_MODEL,
-      messages: options.messages,
-      temperature: options.temperature ?? 0.2,
-      max_tokens: options.max_tokens ?? 1024,
-      stream: false,
-      response_format: { type: "json_object" },
-    }),
-  });
+export async function chatJSON(
+  options: GroqJSONOptions,
+  retries = 3
+): Promise<string> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(`${GROQ_BASE}/chat/completions`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify({
+        model: options.model ?? ANALYSIS_MODEL,
+        messages: options.messages,
+        temperature: options.temperature ?? 0.2,
+        max_tokens: options.max_tokens ?? 1024,
+        stream: false,
+        response_format: { type: "json_object" },
+      }),
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error("Empty response from Groq");
+      return content;
+    }
+
+    if (res.status === 429 && attempt < retries - 1) {
+      const waitMs = 1500 * (attempt + 1);
+      console.warn(`[groq] 429 rate limit, retrying in ${waitMs}ms (attempt ${attempt + 1}/${retries})`);
+      await sleep(waitMs);
+      continue;
+    }
+
     const error = await res.text();
-    throw new Error(`OpenRouter JSON error ${res.status}: ${error}`);
+    throw new Error(`Groq JSON error ${res.status}: ${error}`);
   }
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty response from OpenRouter");
-  return content;
+  throw new Error("Groq JSON failed after max retries");
 }
 
 // ─── SSE Transform ────────────────────────────────────────────────────────────
 
-/**
- * Transforms the raw OpenRouter SSE stream into a clean text stream
- * that yields only the token strings.
- */
 export function createTokenStream(upstreamResponse: Response): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -141,8 +151,7 @@ export function createTokenStream(upstreamResponse: Response): ReadableStream<Ui
 
             try {
               const parsed = JSON.parse(data);
-              const token: string =
-                parsed?.choices?.[0]?.delta?.content ?? "";
+              const token: string = parsed?.choices?.[0]?.delta?.content ?? "";
               if (token) {
                 controller.enqueue(encoder.encode(token));
               }

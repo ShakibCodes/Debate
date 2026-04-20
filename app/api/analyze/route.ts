@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { getFallacySystemPrompt, getFallacyUserPrompt} from "@/lib/prompts";
-import { chatJSON } from "@/lib/openrouter";
-import type { AnalyzeRequest, AnalyzeResponse, } from "@/types/debate";
+import { chatJSON } from "@/lib/groq";
+import { getFallacySystemPrompt, getFallacyUserPrompt } from "@/lib/prompts";
+import type { AnalyzeRequest, AnalyzeResponse } from "@/types/debate";
 
 export const runtime = "edge";
 
@@ -10,7 +10,6 @@ export async function POST(req: NextRequest) {
     const body: AnalyzeRequest = await req.json();
     const { messageId, content, side, topic } = body;
 
-    // ── Validate ──────────────────────────────────────────────────────────────
     if (!messageId || !content?.trim() || !topic?.trim()) {
       return Response.json(
         { error: "messageId, content, and topic are required" },
@@ -18,7 +17,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Call OpenRouter (JSON mode) ───────────────────────────────────────────
     const rawJson = await chatJSON({
       messages: [
         { role: "system", content: getFallacySystemPrompt() },
@@ -27,13 +25,11 @@ export async function POST(req: NextRequest) {
       max_tokens: 800,
     });
 
-    // ── Parse ─────────────────────────────────────────────────────────────────
     let parsed: { fallacies: AnalyzeResponse["fallacies"] };
     try {
       parsed = JSON.parse(rawJson);
     } catch {
       console.error("[/api/analyze] Failed to parse JSON:", rawJson);
-      // Fail gracefully — return empty fallacies rather than 500
       parsed = { fallacies: [] };
     }
 

@@ -1,9 +1,7 @@
-// 📁 LOCATION: app/api/verdict/route.ts
-
 import { NextRequest } from "next/server";
+import { chatJSON } from "@/lib/groq";
+import { getVerdictSystemPrompt, getVerdictUserPrompt } from "@/lib/prompts";
 import type { VerdictRequest, VerdictResponse } from "@/types/debate";
-import { getVerdictSystemPrompt, getVerdictUserPrompt} from "@/lib/prompts";
-import { chatJSON } from "@/lib/openrouter";
 
 export const runtime = "edge";
 
@@ -12,7 +10,6 @@ export async function POST(req: NextRequest) {
     const body: VerdictRequest = await req.json();
     const { topic, messages } = body;
 
-    // ── Validate ──────────────────────────────────────────────────────────────
     if (!topic?.trim()) {
       return Response.json({ error: "topic is required" }, { status: 400 });
     }
@@ -23,7 +20,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Call OpenRouter (JSON mode) ───────────────────────────────────────────
     const rawJson = await chatJSON({
       messages: [
         { role: "system", content: getVerdictSystemPrompt() },
@@ -33,7 +29,6 @@ export async function POST(req: NextRequest) {
       temperature: 0.3,
     });
 
-    // ── Parse ─────────────────────────────────────────────────────────────────
     let verdict: VerdictResponse;
     try {
       verdict = JSON.parse(rawJson);
@@ -45,13 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Basic shape validation
-    if (
-      !verdict.winner ||
-      !verdict.forScore ||
-      !verdict.againstScore ||
-      !verdict.summary
-    ) {
+    if (!verdict.winner || !verdict.forScore || !verdict.againstScore || !verdict.summary) {
       return Response.json(
         { error: "Verdict response is missing required fields" },
         { status: 500 }

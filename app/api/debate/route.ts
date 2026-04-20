@@ -1,7 +1,5 @@
-// 📁 LOCATION: app/api/debate/route.ts
-
 import { NextRequest } from "next/server";
-import { streamChat, createTokenStream } from "@/lib/openrouter";
+import { streamChat, createTokenStream } from "@/lib/groq";
 import { getDebateSystemPrompt } from "@/lib/prompts";
 import type { DebateStreamRequest } from "@/types/debate";
 
@@ -12,7 +10,6 @@ export async function POST(req: NextRequest) {
     const body: DebateStreamRequest = await req.json();
     const { topic, side, history, userMessage } = body;
 
-    // ── Validate ──────────────────────────────────────────────────────────────
     if (!topic?.trim()) {
       return new Response(JSON.stringify({ error: "topic is required" }), {
         status: 400,
@@ -32,12 +29,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── Build messages ────────────────────────────────────────────────────────
     const systemPrompt = getDebateSystemPrompt(topic, side);
 
-    // Convert debate history to OpenRouter format.
-    // The AI always plays the `side` we were given, so its messages are "assistant".
-    // The human is always "user".
     const historyMessages = history.map((m) => ({
       role: (m.side === side ? "assistant" : "user") as "assistant" | "user",
       content: m.content,
@@ -49,7 +42,6 @@ export async function POST(req: NextRequest) {
       { role: "user" as const, content: userMessage },
     ];
 
-    // ── Stream from OpenRouter ────────────────────────────────────────────────
     const upstreamResponse = await streamChat({ messages });
     const tokenStream = createTokenStream(upstreamResponse);
 
@@ -57,8 +49,6 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Transfer-Encoding": "chunked",
-        "X-Content-Type-Options": "nosniff",
-        // Allow client to read headers in CORS context if needed
         "Cache-Control": "no-cache",
       },
     });
